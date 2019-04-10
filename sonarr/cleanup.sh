@@ -1,57 +1,73 @@
 #!/bin/bash
-delete_files=$1
-log_on="false";
-if [ -z "$sonarr_episodefile_sourcefolder"  ]; then
-  file_dir=$2
-  log_on="false";
-  echo "Running on:" $(date);
-  echo "Log:" $log_on;
-else
-  file_dir=$sonarr_episodefile_sourcefolder
-  log_on="true";
-  echo "Running on:" $(date);
-  echo "Running for:" $sonarr_episodefile_sourcepath;
+log_file="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )""/cleanup.log"
+if [ ! -f "$log_file" ]; then
+    touch "$log_file";
+	chmod 777 "$log_file";
 fi
-if [ -d "${file_dir}" ]; then
- if [ $log_on == "true" ]; then
-  echo $(date) "Checking:" $file_dir;
- else
-  echo "Checking:" $file_dir;
- fi
- if [ -z $delete_files ]; then
-  read -p "Do you want to delete files found? " -n 1 -r
-  echo
- fi
- for D in "$file_dir"/*/; do
-  for R in "${D}"*; do
-   if [[ $R == *.rar ]]; then
-    for F in "${D}"*; do
-     if [[ $F == *.mkv ]] || [[ $F == *.avi ]] || [[ $F == *.mp4 ]]; then
-      if [ $log_on == "true" ]; then
-       echo $(date) "RAR Found:" $R >> cleanup.log;
-       echo $(date) "File Found:" $F >> cleanup.log;
-      else
-       echo "RAR Found:" $R;
-       echo "File Found:" $F;
-      fi
-      if [ $delete_files == "true" ] || [[ $REPLY =~ ^[Yy]$ ]]; then
-       if [ $log_on == "true" ]; then
-        echo $(date) "Removing:" $F >> cleanup.log;
-       else
-        echo "Removing:" $F;
-       fi
-       rm "${F}";
-      fi
-      echo
-     fi
-    done
-   fi
-  done
- done
+
+log() {
+	message="$1";
+	echo $(date) "$message";
+	echo $(date) "$message" >> "$log_file";
+}
+
+deleteFiles() {
+	bool_string="$del_arg";
+	if [ $bool_string=="true" ] || [ $bool_string=="True" ] || [ $bool_string=="0" ] || [ $bool_string -eq 0 ];	then
+		# 0 = true
+		return 0;
+	elif [ $bool_string=="false" ] || [ $bool_string=="False" ] || [ $bool_string=="1" ] || [ $bool_string -eq 1 ];	then
+		# 1 = false
+		return 1;
+	else
+		log "$1 could not be parsed as a boolean";
+	fi
+}
+
+# hasSubDirectories() {
+#	subdircount=`find "$1" -maxdepth 1 -type d | wc -l;`
+#	log "Sub Directory Count: $subdircount";
+#	if [ $subdircount -eq 1 ]
+#	then
+#		# 0 = true
+#		return 1;
+#	else
+#		# 1 = false
+#		return 0;
+#	fi
+#}
+
+cleanup() {
+	root_dir="$1"
+	rar_count=`find "$root_dir"*.rar | wc -l`
+	if  [ $rar_count != 0 ] && [ -d "$root_dir" ]; then
+		cd "$root_dir";
+		for F in ./*; do
+			if [[ $F == *.mkv ]] || [[ $F == *.avi ]] || [[ $F == *.mp4 ]]; then
+				if  [ deleteFiles ]; then
+					log "Removing: $F";
+					rm "$F";
+				else
+					log "Would Normally Remove: $F";
+				fi
+			fi
+		done
+	else
+		log "RAR Count: $rar_count - Command: find $1*.rar | wc -l";
+	fi
+}
+# delete video files if found
+del_arg="true";
+# folder to look in
+arg1="$sonarr_episodefile_sourcefolder/";
+log "Checking: $arg1";
+if [ -d "$arg1" ]; then
+	if [ deleteFiles ]; then
+		log "Delete Set: true";
+	else
+		log "Delete Set: false";
+	fi
+	cleanup "$arg1";
 else
- if [ $log_on == "true" ]; then
-  echo $(date) $file_dir "is not found" >> cleanup.log;
- else
-  echo $file_dir "is not found";
- fi
+	log "Directory: $arg1 not found";
 fi
